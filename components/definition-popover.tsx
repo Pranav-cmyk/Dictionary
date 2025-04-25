@@ -2,9 +2,13 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Card } from "@/components/ui/card"
-import { X, BookOpen, MousePointer, Sparkles, Move, Volume2, VolumeX, Maximize2, Minimize2, ChevronDown, ChevronUp } from "lucide-react"
+import { X, BookOpen, MousePointer, Sparkles, Move, Volume2, VolumeX, Maximize2, Minimize2, ChevronDown, ChevronUp, MessageCircle } from "lucide-react"
 import { motion, AnimatePresence, type PanInfo } from "framer-motion"
 import { useMediaQuery } from "@/app/hooks/use-media-query"
+import { GoogleGenAI } from "@google/genai"
+
+
+const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY as string })
 
 interface DefinitionPopoverProps {
   word: string
@@ -32,26 +36,26 @@ export default function DefinitionPopover({
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
   const [showFullDefinition, setShowFullDefinition] = useState(false)
+  const [showChat, setShowChat] = useState(false)
+  const [chatMessage, setChatMessage] = useState("")
+  const [chatMessages, setChatMessages] = useState<Array<{sender: string, text: string}>>([])
   const speechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null)
 
   const isMobile = useMediaQuery("(max-width: 768px)")
   
   // Constants for text truncation
-  const MAX_WORD_CHARS = 25 // Max characters for word before truncation
-  const MAX_DEFINITION_CHARS = 180 // Max characters for definition before truncation
+  const MAX_WORD_CHARS = 25
+  const MAX_DEFINITION_CHARS = 180
   const isDefinitionTruncated = definition.length > MAX_DEFINITION_CHARS && !showFullDefinition
 
-  // Format the selected word with truncation if needed
   const formattedWord = word.length > MAX_WORD_CHARS 
     ? `${word.substring(0, MAX_WORD_CHARS)}...` 
     : word
 
-  // Format definition with truncation if needed
   const formattedDefinition = isDefinitionTruncated 
     ? `${definition.substring(0, MAX_DEFINITION_CHARS)}...` 
     : definition
 
-  // Initialize speech synthesis
   useEffect(() => {
     return () => {
       if (speechSynthesisRef.current) {
@@ -60,7 +64,6 @@ export default function DefinitionPopover({
     }
   }, [])
 
-  // Adjust dimensions for mobile
   useEffect(() => {
     if (isMobile) {
       setPopoverDimensions({
@@ -124,18 +127,45 @@ export default function DefinitionPopover({
     setTimeout(updatePosition, 50)
   }
 
-  // Update position on mount and when position changes
+  async function handleSendMessage() {
+
+    if (chatMessage.trim()) {
+      setChatMessages([...chatMessages, { sender: "user", text: chatMessage }])
+      setChatMessage("")
+
+      const prompt = `You are a helpful assistant. Explain the word provided by the user${chatMessage} in a concise and easy-to-understand manner, in a previous response you've explained the meaning of the word: ${word}. Use simple language and avoid technical jargon.`
+      console.log(prompt)
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash-exp",
+        contents: prompt,
+        config: {
+          maxOutputTokens: 100, // Adjust the model's response length as needed
+          temperature: 0.8, // Adjust the model's creativity level
+        },
+      })
+  
+
+      setTimeout(() => {
+        setChatMessages(prev => [...prev, { 
+          sender: "assistant", 
+          text: response.text || "Sorry, I couldn't find a definition." 
+        }])
+      }, 800)
+
+    }
+
+  }
+
   useEffect(() => {
     setIsVisible(true)
     setTimeout(() => updatePosition(), 0)
   }, [position])
 
-  // Measure actual popover dimensions after render
   useEffect(() => {
     if (popoverRef.current && isVisible) {
       updatePosition()
     }
-  }, [isVisible, popoverDimensions, isExpanded])
+  }, [isVisible, popoverDimensions, isExpanded, showChat])
 
   const updatePosition = () => {
     if (!popoverRef.current || (hasBeenManuallyPositioned && !isDragging)) return
@@ -147,35 +177,26 @@ export default function DefinitionPopover({
     let x = position.x
     let y = position.y
 
-    // Mobile positioning - center and adjust based on available space
     if (isMobile) {
       x = viewportWidth / 2
-      
-      // Check if there's enough space below
       const spaceBelow = viewportHeight - y
       const spaceNeeded = height + 20
       
       if (spaceBelow < spaceNeeded) {
-        // Position above if not enough space below
         y = Math.max(height / 2 + 20, y - 20)
       } else {
-        // Position below with some margin
         y = Math.min(viewportHeight - height / 2 - 20, y + 20)
       }
-    } 
-    // Desktop positioning
-    else {
-      // Horizontal boundary check
+    } else {
       x = Math.max(width / 2 + 10, Math.min(x, viewportWidth - width / 2 - 10))
       
-      // Vertical positioning with smart flipping
       const spaceBelow = viewportHeight - y
       const spaceNeeded = height + 20
 
       if (spaceBelow < spaceNeeded && y > spaceNeeded) {
-        y = y - 20 // Position above
+        y = y - 20
       } else {
-        y = y + 20 // Position below
+        y = y + 20
       }
 
       y = Math.max(10, Math.min(y, viewportHeight - 10))
@@ -184,7 +205,6 @@ export default function DefinitionPopover({
     setDragPosition({ x, y })
   }
 
-  // Handle scroll and window resize
   useEffect(() => {
     const handleScroll = () => {
       if (!isDragging && isVisible && !hasBeenManuallyPositioned) {
@@ -263,7 +283,6 @@ export default function DefinitionPopover({
             transform: "translate(-50%, -50%)",
             cursor: isDragging ? "grabbing" : "grab",
             touchAction: "none",
-            // Prevent popover from being clipped by viewport edges
             maxWidth: '100vw',
             maxHeight: '100vh',
           }}
@@ -301,7 +320,7 @@ export default function DefinitionPopover({
                 isHoverMode ? "bg-blue-100/30 border-b border-blue-200/50" : "bg-slate-50/70 border-b border-slate-100"
               }`}
             >
-              <div className="flex items-center min-w-0"> {/* Added min-w-0 to allow text truncation */}
+              <div className="flex items-center min-w-0">
                 <motion.div className="mr-2 cursor-move" whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
                   <Move className="h-4 w-4" />
                 </motion.div>
@@ -310,10 +329,10 @@ export default function DefinitionPopover({
                 ) : (
                   <BookOpen className="h-4 w-4 mr-2 text-slate-700 flex-shrink-0" />
                 )}
-                <div className="min-w-0"> {/* Wrapper div for better truncation */}
+                <div className="min-w-0">
                   <h3 
                     className="font-medium text-sm md:text-base truncate"
-                    title={word} // Show full text on hover
+                    title={word}
                   >
                     {formattedWord}
                   </h3>
@@ -339,6 +358,15 @@ export default function DefinitionPopover({
                   )}
                 </button>
                 <button
+                  onClick={() => setShowChat(!showChat)}
+                  className={`rounded-full p-1 transition-colors ${
+                    isHoverMode ? "hover:bg-blue-200/50" : "hover:bg-slate-200/50"
+                  }`}
+                  aria-label="Chat about definition"
+                >
+                  <MessageCircle className={`h-4 w-4 ${showChat ? (isHoverMode ? "text-blue-600" : "text-slate-600") : (isHoverMode ? "text-blue-400" : "text-slate-400")}`} />
+                </button>
+                <button
                   onClick={toggleExpand}
                   className={`rounded-full p-1 transition-colors ${
                     isHoverMode ? "text-blue-600 hover:bg-blue-200/50" : "text-slate-500 hover:bg-slate-200/50"
@@ -346,15 +374,6 @@ export default function DefinitionPopover({
                   aria-label={isExpanded ? "Minimize" : "Maximize"}
                 >
                   {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                </button>
-                <button
-                  onClick={resetPosition}
-                  className={`rounded-full p-1 transition-colors ${
-                    isHoverMode ? "text-blue-600 hover:bg-blue-200/50" : "text-slate-500 hover:bg-slate-200/50"
-                  }`}
-                  aria-label="Reset position"
-                >
-                  <Sparkles className="h-4 w-4" />
                 </button>
                 <button
                   onClick={handleClose}
@@ -369,76 +388,121 @@ export default function DefinitionPopover({
             </div>
 
             <div 
-              className="p-3 md:p-5 overflow-y-auto" 
+              className="overflow-y-auto" 
               style={{ 
-                height: `calc(100% - ${isMobile ? '72px' : '96px'})`,
-                WebkitOverflowScrolling: 'touch' // Smooth scrolling on iOS
+                height: showChat 
+                  ? `calc(100% - ${isMobile ? '72px' : '96px'} - ${isMobile ? '64px' : '72px'})` 
+                  : `calc(100% - ${isMobile ? '72px' : '96px'})`,
+                WebkitOverflowScrolling: 'touch'
               }}
             >
-              {loading ? (
-                <motion.div
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center justify-center py-4"
-                >
+              <div className="p-3 md:p-5">
+                {loading ? (
                   <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Number.POSITIVE_INFINITY, duration: 1, ease: "linear" }}
-                    className={`h-5 w-5 border-2 border-t-transparent rounded-full mr-3 ${
-                      isHoverMode ? "border-blue-500" : "border-slate-600"
-                    }`}
-                  />
-                  <span className={isHoverMode ? "text-blue-700" : "text-slate-600"}>Finding definition...</span>
-                </motion.div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="h-full"
-                >
-                  <div className="flex flex-col">
-                    <p className={`text-sm leading-relaxed ${isHoverMode ? "text-blue-900" : "text-slate-800"}`}>
-                      {formattedDefinition}
-                    </p>
-                    
-                    {definition.length > MAX_DEFINITION_CHARS && (
-                      <button 
-                        onClick={toggleDefinitionLength}
-                        className={`flex items-center text-xs mt-2 self-start ${
-                          isHoverMode ? "text-blue-600 hover:text-blue-800" : "text-slate-500 hover:text-slate-700"
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center justify-center py-4"
+                  >
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ repeat: Number.POSITIVE_INFINITY, duration: 1, ease: "linear" }}
+                      className={`h-5 w-5 border-2 border-t-transparent rounded-full mr-3 ${
+                        isHoverMode ? "border-blue-500" : "border-slate-600"
+                      }`}
+                    />
+                    <span className={isHoverMode ? "text-blue-700" : "text-slate-600"}>Finding definition...</span>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                  >
+                    <div className="flex flex-col">
+                      <p className={`text-sm leading-relaxed ${isHoverMode ? "text-blue-900" : "text-slate-800"}`}>
+                        {formattedDefinition}
+                      </p>
+                      
+                      {definition.length > MAX_DEFINITION_CHARS && (
+                        <button 
+                          onClick={toggleDefinitionLength}
+                          className={`flex items-center text-xs mt-2 self-start ${
+                            isHoverMode ? "text-blue-600 hover:text-blue-800" : "text-slate-500 hover:text-slate-700"
+                          }`}
+                        >
+                          {showFullDefinition ? (
+                            <>
+                              <ChevronUp className="h-3 w-3 mr-1" />
+                              Show less
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-3 w-3 mr-1" />
+                              Show more
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {showChat && chatMessages.length > 0 && (
+                <div className={`px-3 pb-2 border-t ${isHoverMode ? 'border-blue-200/30' : 'border-slate-200'}`}>
+                  <div className="space-y-2 max-h-[120px] overflow-y-auto">
+                    {chatMessages.map((msg, i) => (
+                      <div 
+                        key={i} 
+                        className={`text-xs p-2 rounded-lg ${msg.sender === 'user' 
+                          ? (isHoverMode ? 'bg-blue-100 text-blue-900' : 'bg-slate-100 text-slate-800') 
+                          : (isHoverMode ? 'bg-blue-50 border border-blue-100 text-blue-800' : 'bg-white border border-slate-200 text-slate-700')
                         }`}
                       >
-                        {showFullDefinition ? (
-                          <>
-                            <ChevronUp className="h-3 w-3 mr-1" />
-                            Show less
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="h-3 w-3 mr-1" />
-                            Show more
-                          </>
-                        )}
-                      </button>
-                    )}
+                        {msg.text}
+                      </div>
+                    ))}
                   </div>
-                </motion.div>
+                </div>
               )}
             </div>
 
-            <div
-              className={`px-3 md:px-4 py-2 text-xs flex items-center justify-between ${
+            {showChat ? (
+              <div className={`px-3 py-2 border-t ${isHoverMode ? 'border-blue-200/50 bg-blue-50/70' : 'border-slate-100 bg-slate-50/70'}`}>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={chatMessage}
+                    onChange={(e) => setChatMessage(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    placeholder="Ask about this definition..."
+                    className="flex-1 text-xs px-3 py-2 rounded-lg border bg-white/80 focus:outline-none"
+                  />
+                  <button 
+                    onClick={handleSendMessage}
+                    disabled={!chatMessage.trim()}
+                    className={`px-3 py-2 text-xs rounded-lg ${
+                      isHoverMode 
+                        ? 'bg-blue-500 text-white hover:bg-blue-600 disabled:bg-blue-300' 
+                        : 'bg-slate-600 text-white hover:bg-slate-700 disabled:bg-slate-300'
+                    }`}
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className={`px-3 md:px-4 py-2 text-xs flex items-center justify-between ${
                 isHoverMode
                   ? "border-t border-blue-200/50 bg-blue-50/50 text-blue-600"
                   : "border-t border-slate-100 bg-slate-50/50 text-slate-500"
-              }`}
-            >
-              <span className="text-[10px] md:text-xs">
-                {isMobile ? "Drag to move" : "Drag to move • Context-aware definition"}
-              </span>
-              <Sparkles className={`h-3 w-3 ${isHoverMode ? "text-blue-400" : "text-slate-400"}`} />
-            </div>
+              }`}>
+                <span className="text-[10px] md:text-xs">
+                  {isMobile ? "Drag to move" : "Drag to move • Context-aware definition"}
+                </span>
+                <Sparkles className={`h-3 w-3 ${isHoverMode ? "text-blue-400" : "text-slate-400"}`} />
+              </div>
+            )}
           </Card>
         </motion.div>
       )}

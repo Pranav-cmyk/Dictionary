@@ -2,12 +2,17 @@ import type React from "react"
 import "./globals.css"
 import { Inter } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import Footer from "@/components/footer"
+import { cn } from "@/lib/utils"
 
-const inter = Inter({ subsets: ["latin"] })
+const inter = Inter({ 
+  subsets: ["latin"],
+  variable: '--font-inter',
+})
 
 export const metadata = {
-  title: "Active Dictionary - Context-Aware Definitions",
+  title: "adoread",
   description: "Get context-aware definitions powered by Google Gemini AI",
 }
 
@@ -17,14 +22,30 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} flex flex-col min-h-screen`}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          {children}
-          <Footer />
+    <html 
+      lang="en" 
+      suppressHydrationWarning
+      className={cn(
+        inter.variable,
+        'antialiased'
+      )}
+    >
+      <body className={cn(
+        "flex min-h-screen flex-col bg-background font-sans",
+        inter.className
+      )}>
+        <ThemeProvider 
+          attribute="class" 
+          defaultTheme="light" 
+          enableSystem 
+          disableTransitionOnChange
+        >
+          <TooltipProvider>
+            {children}
+            <Footer />
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>
   )
 }
-

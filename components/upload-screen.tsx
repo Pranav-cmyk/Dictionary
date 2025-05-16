@@ -1,10 +1,10 @@
 "use client"
 
 import type React from "react"
-
 import { Upload, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import QuickSuggestions from "@/components/quick-suggestions"
 
 interface UploadScreenProps {
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>
@@ -14,6 +14,7 @@ interface UploadScreenProps {
 export default function UploadScreen({ handleFileUpload, loading }: UploadScreenProps) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8">
+      {/* Upload Card */}
       <Card className="w-full max-w-2xl p-6 md:p-8 flex flex-col items-center justify-center border-dashed border-2 border-[#ffbd59] bg-white shadow-sm transition-all hover:border-black hover:shadow-md">
         <div className="bg-blue-50 p-4 rounded-full mb-6">
           <Upload className="h-8 w-8 md:h-10 md:w-10 text-black" />
@@ -42,12 +43,16 @@ export default function UploadScreen({ handleFileUpload, loading }: UploadScreen
         )}
       </Card>
 
+      {/* Quick Suggestions Component */}
+      <QuickSuggestions />
+
+      {/* Info Card */}
       <div className="mt-8 w-full max-w-2xl">
         <Card className="p-4 bg-amber-50 border border-amber-200">
           <div className="flex items-start">
             <Info className="h-5 w-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0" />
             <div>
-              <h3 className="font-medium text-amber-800 mb-1">How to use Active Dictionary</h3>
+              <h3 className="font-medium text-amber-800 mb-1">How to use adoread</h3>
               <p className="text-sm text-amber-700">After uploading a document, you can:</p>
               <ul className="text-sm text-amber-700 mt-2 list-disc list-inside space-y-1">
                 <li>Select any text to see its context-aware definition</li>
@@ -62,3 +67,4 @@ export default function UploadScreen({ handleFileUpload, loading }: UploadScreen
     </div>
   )
 }
+
